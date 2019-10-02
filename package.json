@@ -1,0 +1,10 @@
+{
+  "name": "ONC-Bot",
+  "version": "1.0.0",
+  "description": "My First Discord Bot",
+  "main": "bot.js",
+  "author": "RickC",
+  "dependencies": {
+    "discord.js": "^11.5.1"
+  }
+}
