@@ -1,38 +1,69 @@
-// Discord Bot
+ /**************************************************
+ ***************************************************
+ * Discord Bot
+ * 
+ * Instantiates and authorizes the bot. Also
+ * contains bot specific functions like responding
+ * to messages and the server introductions.
+ * 
+ *************************************************** 
+ ***************************************************/
+
+// Discord Bot requirements
 const Discord = require('discord.js');
 const auth = require("./auth.json");
-const client = new Discord.Client();
 
-client.on('ready', () => {
-  console.log(`Logged in as ${client.user.tag}!`);
+// Instantiate the bot
+const bot = new Discord.Client();
+
+// Bot login
+bot.login(auth.token);
+
+// Message to console upon bot being ready
+bot.on('ready', () => {
+  console.log(`Logged in as ${bot.user.tag}!`);
 });
 
-// client.on('message', msg => {
-//   if (msg.content === 'ping') {
-//     const embed = new Discord.RichEmbed()
-//     // Set the title of the field
-//     .setTitle('A slick little embed')
-//     // Set the color of the embed
-//     .setColor(0xFF0000)
-//     // Set the main content of the embed
-//     .setDescription('Hello, this is a slick embed!')
-//     .setURL('https://www.youtube.com/watch?v=fluhS8Nwo7c')
-//     .setThumbnail('https://img.youtube.com/vi/fluhS8Nwo7c/maxresdefault.jpg');
+// Bot responds to message
+bot.on('message', msg => {
+  if (msg.content === 'ping') {
+    const embed = new Discord.RichEmbed()
+    // Set the title of the field
+    .setTitle('A slick little embed')
+    // Set the color of the embed
+    .setColor(0xFF0000)
+    // Set the main content of the embed
+    .setDescription('Hello, this is a slick embed!')
+    .setURL('https://www.youtube.com/watch?v=fluhS8Nwo7c')
+    .setThumbnail('https://img.youtube.com/vi/fluhS8Nwo7c/maxresdefault.jpg');
+    msg.channel.send(embed);
+  }
+});
 
-//     msg.channel.send('https://www.youtube.com/watch?v=fluhS8Nwo7c');
-//   }
-// });
 
-client.login(auth.token);
-
+ /**************************************************
+ ***************************************************
+ * HTTP Server
+ * 
+ * Used to subscribe and fetch youtube push
+ * notifcations and relay them to the ONC Discord
+ * server.
+ * 
+ *************************************************** 
+ ***************************************************/
 
 // Http server
 const http = require('http');
-const url = require('url');
-const { parse } = require('querystring');
 
-// Previous ink (in case of duplicate)
+// Variable to hold previous link (detect duplicate posts)
 var prevLink;
+
+// Object to hold Youtube subscriptions
+var youtubeChannels = [
+  ['mod-commands', 'Richard Constantine'],
+  ['tech-news', 'Linus Tech Tips'],
+  ['game-news', 'Spawn Wave', 'Inside Gaming', 'Nintendo', 'Xbox', 'PlayStation']
+]
 
 http.createServer(function (req, res) {
   
@@ -52,8 +83,50 @@ http.createServer(function (req, res) {
     
     console.log(body);
 
-    // Pubsubhubbub Verification
+    // GET - Pubsubhubbub Verification
     if (req.method == 'GET'){
+
+      respondToChallenge(req, res);
+
+    }
+
+    // POST - Parse update, extract Youtube link, and post to Discord channel
+    if (req.method == 'POST'){
+
+      // Acquire Youtube link 
+      var link = getLink(body);
+
+      // Check previous link (in case duplicate is sent)
+      if (link != prevLink && link != '') {
+
+        // Store previous link in case of duplicate requests
+        prevLink = link;
+
+        discordChannel = findChannel(getName(body));
+
+        // Find channel
+        channel = bot.channels.find(ch => ch.name === discordChannel);
+
+        // Send to disord channel if exists
+        if (channel) {
+          channel.send(link);
+        }
+      }
+    }
+  });
+}).listen(8080);
+
+ /**************************************************
+ ***************************************************
+ * respondToChallenge
+ * 
+ * 
+ *
+ * 
+ *************************************************** 
+ ***************************************************/
+
+function respondToChallenge(req, res) {
 
       // Indices within query string
       var challengeStart = req.url.indexOf('&') + 1;
@@ -70,38 +143,122 @@ http.createServer(function (req, res) {
 
       console.log(challenge);
       console.log(challengeCode);
-    }
+      return;
+}
 
-    // Parse update, extract Youtube link, and post to Discord channel
-    if (req.method == 'POST'){
+ /**************************************************
+ ***************************************************
+ * getName
+ * 
+ * 
+ *
+ * 
+ *************************************************** 
+ ***************************************************/
 
-      // Greedily parse Atom Syndication Format - look for a word that locates Youtube link
-      // (in this case - the word 'alternate') and acquire it's index
-      var linkIdentiferIndex = body.indexOf('alternate');
+function getName(body) {
+
+    // Greedily parse Atom Syndication Format - look for a word that locates Youtube channel
+    // name (in this case - the word 'name') and acquire it's index
+    var nameIdentiferIndex = body.indexOf('name');
+    
+    // Cannot find name - return empty string
+    if (nameIdentiferIndex == -1) 
+      return '';
+        
+    // Find the Youtube channel name within the line:
+    // <name>Channel Name Here</name>
+    var linkIndexStart = nameIdentiferIndex + 5;
+    var linkIndexStop = body.indexOf('<', linkIndexStart);
+    var name = body.substring(linkIndexStart, linkIndexStop);
+    
+    // Return link
+    console.log(name);
+    return name;
+}
+
+ /**************************************************
+ ***************************************************
+ * getLink 
+ * 
+ * 
+ *
+ * 
+ *************************************************** 
+ ***************************************************/
+
+function getLink(body) {
+
+    // Greedily parse Atom Syndication Format - look for a word that locates Youtube link
+    // (in this case - the word 'alternate') and acquire it's index
+    var linkIdentiferIndex = body.indexOf('alternate');
+    
+    // Cannot find link - return empty string
+    if (linkIdentiferIndex == -1) 
+      return '';
+        
+    // Find the Youtube link within the line:
+    // <link rel="alternate" href="https://www.youtube.com/watch?v=XXXXXXXX"/>
+    var linkIndexStart = body.indexOf('href', linkIdentiferIndex) + 6;
+    var linkIndexStop = body.indexOf('>', linkIndexStart) - 2;
+    var link = body.substring(linkIndexStart, linkIndexStop);
+    
+    // Return link
+    console.log(link);
+    return link;
+}
+
+ /**************************************************
+ ***************************************************
+ * findChannel
+ * 
+ * 
+ * Finds a discord channel (in the ONC server)
+ * associated with the Youtube video posted
+ * 
+ *************************************************** 
+ ***************************************************/
+
+
+function findChannel(name){
+
+  for(i = 0; i < youtubeChannels.length; i++){
+    for(j = 1; j < youtubeChannels[i].length; j++){
       
-      if (linkIdentiferIndex == -1) return;
-          
-      // Find the Youtube link within the line:
-      // <link rel="alternate" href="https://www.youtube.com/watch?v=XXXXXXXX"/>
-      var linkIndexStart = body.indexOf('href', linkIdentiferIndex) + 6;
-      var linkIndexStop = body.indexOf('>', linkIndexStart) - 2;
-      var link = body.substring(linkIndexStart, linkIndexStop);
-      
-      console.log(link);
-
-      // Check previous link (in case duplicate is sent)
-      if (link != prevLink) {
-
-        prevLink = link;
-
-        // Find channel
-        const channel = client.channels.find(ch => ch.name === 'mod-commands');
-
-        if (!channel) return;
-
-        // Send link to discord
-        channel.send(link);
+      if(name == youtubeChannels[i][j]) {
+        console.log('Sending to Discord @ channel ' + youtubeChannels[i][0]);
+        return youtubeChannels[i][0];
       }
     }
-  });
-}).listen(8080);
+  }
+
+  return '';
+
+}
+
+function printDiscordChannels() {
+
+    for(i = 0; i < youtubeChannels.length; i++){
+        console.log(youtubeChannels[i][0]);
+      }
+}
+
+function printYoutubeSubs() {
+
+  
+  for(i = 0; i < youtubeChannels.length; i++){
+    for(j = 1; j < youtubeChannels[i].length; j++){
+      console.log(youtubeChannels[i][j]);
+    }
+  }
+}
+
+function printChannelAndSubs() {
+
+  
+  for(i = 0; i < youtubeChannels.length; i++){
+    for(j = 0; j < youtubeChannels[i].length; j++){
+      console.log(youtubeChannels[i][j]);
+    }
+  }
+}
