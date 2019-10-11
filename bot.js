@@ -56,7 +56,7 @@ bot.on('message', msg => {
 const http = require('http');
 
 // Variable to hold previous link (detect duplicate posts)
-var prevLink;
+var prevLinks = [];
 
 // Object to hold Youtube subscriptions
 var youtubeChannels = [
@@ -94,17 +94,16 @@ http.createServer(function (req, res) {
     if (req.method == 'POST'){
 
       // Acquire Youtube link 
-      var link = getLink(body);
+      let link = getLink(body);
 
       // Check previous link (in case duplicate is sent)
-      if (link != prevLink && link != '') {
+      if (!prevLinks.includes(link) && link != '') {
 
         // Store previous link in case of duplicate requests
-        prevLink = link;
+        prevLinks.push(link);
 
+        // Find Disocrd channel
         discordChannel = findChannel(getName(body));
-
-        // Find channel
         channel = bot.channels.find(ch => ch.name === discordChannel);
 
         // Send to disord channel if exists
